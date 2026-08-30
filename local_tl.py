@@ -77,40 +77,57 @@ print(lens["provenance"])
 
 #%%
 
-def jlens_transport(acts: Tensor, lens: dict, layer: int) -> Tensor:
-    lens_layer = lens["J"][layer].to(t.bfloat16)
-    return lens_layer @ acts
-
-def get_lens_logits(h: Tensor, layer: int, model: TransformerBridge, lens: dict) -> Tensor:
-    return model.unembed(model.ln_final(jlens_transport(h, lens, layer)))
 
 conv = [
     {"role": "user", "content": "What's the currency used in the country shaped like a boot?"},
-    # {"role": "user", "content": prompt},
+    {"role": "assistant", "content": "The currency used there is the"},
 ]
 conv_toks = tokenizer.apply_chat_template(
     conv,
-    add_generation_prompt=True,
+    # add_generation_prompt=True,
     return_tensors="pt",
     tokenize=True,
     return_dict=False,
     enable_thinking=False,
     reasoning_effort="medium",
-).to(model.device)
+).to(model.device).squeeze()[:-2]
 
-for i, stok in enumerate(to_str_toks(conv_toks, tokenizer)):
-    print(f"[{i}] {stok}")
+# print(list(zip(range(conv_toks.shape[-1]), to_str_toks(conv_toks, tokenizer))))
 
+print(cyan, tokenizer.decode(conv_toks), endc)
+print(pink, conv_toks.shape, endc)
 logits, cache = model.run_with_cache(conv_toks, names_filter=lambda n: "resid" in n)
 t.cuda.empty_cache()
 
-layer = 26
-seq_pos = 15
-targ_acts = cache[f"blocks.{layer}.hook_resid_pre"].squeeze()[seq_pos]
-print(pink, targ_acts.shape, endc)
-lens_logits = get_lens_logits(targ_acts, layer, model, lens)
-top_toks_table(lens_logits, tokenizer, k=15)
+#%%
 
-t.cuda.empty_cache()
+# layer = 20
+seq_pos = 25
+targ_stok = repr(tokenizer.decode(conv_toks.squeeze()[seq_pos]))
+for layer in range(20, 36, 2):
+    targ_acts = cache[f"blocks.{layer}.hook_resid_pre"].squeeze()[seq_pos]
+    lens_logits = get_lens_logits(targ_acts, layer, model, lens)
+    top_toks_table(lens_logits, tokenizer, k=15, title=f"[L{layer}] jlens on the {targ_stok}")
+
+    t.cuda.empty_cache()
 
 #%%
+
+tlens = load_tlens("qwen3.6-27b/template-lens/templates+phrases_v3.safetensors")
+print(tlens["meta"])
+print(tlens["templates"].shape)
+
+#%%
+
+seq_pos = 30
+targ_stok = repr(tokenizer.decode(conv_toks.squeeze()[seq_pos]))
+for layer in range(20, 36, 2):
+    targ_acts = cache[f"blocks.{layer}.hook_resid_pre"].squeeze()[seq_pos]
+    scores = get_tlens_scores(targ_acts, layer, tlens)
+    top_templates_table(scores, tlens["words"], k=15, title=f"[L{layer}] tlens on the {targ_stok}")
+
+    t.cuda.empty_cache()
+
+#%%
+
+print(tokenizer.decode(model.generate(conv_toks.reshape(1, -1), max_new_tokens=32)))

@@ -12,6 +12,7 @@ from tabulate import tabulate
 import IPython
 
 from huggingface_hub import hf_hub_download
+from safetensors import safe_open
 
 import numpy as np
 
@@ -154,8 +155,28 @@ def load_jlens(path: str, device: str = "cpu") -> dict:
     local_path = hf_hub_download(repo_id="camilablank/workspace-lenses", filename=path)
     return t.load(local_path, map_location=device, weights_only=False)
 
+def load_tlens(path: str, device: str = "cpu") -> dict:
+    """Download a template lens safetensors file + its row->text map from the workspace-lenses repo (cached) and load it."""
+    local_path = hf_hub_download(repo_id="camilablank/workspace-lenses", filename=path)
+    words_path = hf_hub_download(repo_id="camilablank/workspace-lenses", filename=path.replace("templates", "template_words").replace(".safetensors", ".txt"))
+    with safe_open(local_path, framework="pt", device=device) as f:
+        tlens = {"meta": f.metadata(), "templates": f.get_tensor("templates"), "word_ids": f.get_tensor("word_ids")}
+    tlens["words"] = [line.split("\t", 1)[1] for line in open(words_path).read().splitlines()]
+    return tlens
+
 def to_str_toks(inp: str|Tensor, tokenizer) -> list[str]:
     return [tokenizer.decode(tok) for tok in (tokenizer.encode(inp)[0] if isinstance(inp, str) else inp.squeeze())]
+
+def print_titled_table(table_str: str, title: str | None = None):
+    if title is not None:
+        lines = table_str.splitlines()
+        inner = len(lines[0]) - 2
+        print(f"╭{'─' * inner}╮")
+        print(f"│{bold}{title.center(inner)}{endc}│")
+        print(f"├{'─' * inner}┤")
+        print("\n".join(lines[1:]))
+    else:
+        print(table_str)
 
 def top_toks_table(logits: Tensor, tokenizer, k: int = 10, show_negative: bool = False, show_probs: bool = True, title: str | None = None, return_top=False):
     logits = logits.flatten()
@@ -172,16 +193,39 @@ def top_toks_table(logits: Tensor, tokenizer, k: int = 10, show_negative: bool =
         headers = [f"Top {h}" for h in headers] + [f"Bot {h}" for h in headers]
         cols += [[repr(s) for s in bot_strs], bot_vals] + ([probs[bot.indices].tolist()] if show_probs else [])
     data = [(i, *(col[i] for col in cols)) for i in range(k)]
-    table_str = tabulate(data, headers=["Idx"] + headers, tablefmt="rounded_outline")
-    if title is not None:
-        lines = table_str.splitlines()
-        inner = len(lines[0]) - 2
-        print(f"╭{'─' * inner}╮")
-        print(f"│{bold}{title.center(inner)}{endc}│")
-        print(f"├{'─' * inner}┤")
-        print("\n".join(lines[1:]))
-    else:
-        print(table_str)
+    print_titled_table(tabulate(data, headers=["Idx"] + headers, tablefmt="rounded_outline"), title)
+
+    if return_top:
+        if show_negative:
+            return (top_strs, top_vals, bot_strs, bot_vals)
+        else:
+            return (top_strs, top_vals)
+
+def jlens_transport(acts: Tensor, lens: dict, layer: int) -> Tensor:
+    lens_layer = lens["J"][layer].to(t.bfloat16)
+    return lens_layer @ acts
+
+def get_lens_logits(h: Tensor, layer: int, model: TransformerBridge, lens: dict) -> Tensor:
+    return model.unembed(model.ln_final(jlens_transport(h, lens, layer)))
+
+def get_tlens_scores(h: Tensor, layer: int, tlens: dict) -> Tensor:
+    return t.cosine_similarity(tlens["templates"][layer].to(h.device), h, dim=-1)
+
+def top_templates_table(scores: Tensor, words: list[str], k: int = 10, show_negative: bool = False, title: str | None = None, return_top=False):
+    scores = scores.flatten().float()
+    top = scores.topk(k)
+    top_strs = [repr(words[i]) for i in top.indices.tolist()]
+    top_vals = top.values.tolist()
+    headers = ["Template", "Cos"]
+    cols = [top_strs, top_vals]
+    if show_negative:
+        bot = scores.topk(k, largest=False)
+        bot_strs = [repr(words[i]) for i in bot.indices.tolist()]
+        bot_vals = bot.values.tolist()
+        headers = [f"Top {h}" for h in headers] + [f"Bot {h}" for h in headers]
+        cols += [bot_strs, bot_vals]
+    data = [(i, *(col[i] for col in cols)) for i in range(k)]
+    print_titled_table(tabulate(data, headers=["Idx"] + headers, tablefmt="rounded_outline"), title)
 
     if return_top:
         if show_negative:
