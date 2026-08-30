@@ -12,6 +12,7 @@ import numpy as np
 
 import torch as t
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformer_lens.model_bridge import TransformerBridge
 
 purple = '\x1b[38;2;255;0;255m'
 blue = '\x1b[38;2;0;0;255m'
@@ -82,3 +83,15 @@ def load_batch_results(path: str) -> tuple[list[dict], dict]:
     with open(path) as f:
         data = json.load(f)
     return data["results"], data["metadata"]
+
+
+def stream_toks_bridge(model: TransformerBridge, inputs, new_toks: int = 512):
+    toks = inputs
+    past = None
+    for _ in range(new_toks):
+        logits, past = model(toks, return_type="logits_and_cache", past_key_values=past)
+        probs = t.softmax(logits[0, -1], dim=-1)
+        toks = t.multinomial(probs, num_samples=1).unsqueeze(0)
+        if toks.item() == model.tokenizer.eos_token_id:
+            break
+        yield toks.item()

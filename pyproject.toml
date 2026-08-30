@@ -14,5 +14,6 @@ dependencies = [
     "requests>=2.34.2",
     "torch>=2.13.0",
     "tqdm>=4.70.0",
+    "transformer-lens>=3.8.0",
     "transformers>=5.16.1",
 ]
