@@ -79,7 +79,7 @@ def run_batch(model: str, prompt: str, provider: str, n_samples: int, bar: tqdm,
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = [pool.submit(query, model, prompt, provider) for _ in range(n_samples)]
         for done, _ in enumerate(as_completed(futures), 1):
-            bar.set_description(f"{model} {done}/{n_samples} done")
+            if bar is not None: bar.set_description(f"{model} {done}/{n_samples} done")
     return [f.result() for f in futures]
 
 
@@ -201,12 +201,27 @@ def top_toks_table(logits: Tensor, tokenizer, k: int = 10, show_negative: bool =
         else:
             return (top_strs, top_vals)
 
+def underline_stoks(toks: Tensor, tokenizer) -> str:
+    stoks = to_str_toks(toks, tokenizer)
+    return "".join([f"{underline if i%2 else endc}{stoks[i]}" for i in range(len(stoks))])
+
 def jlens_transport(acts: Tensor, lens: dict, layer: int) -> Tensor:
     lens_layer = lens["J"][layer].to(t.bfloat16)
     return lens_layer @ acts
 
 def get_lens_logits(h: Tensor, layer: int, model: TransformerBridge, lens: dict) -> Tensor:
     return model.unembed(model.ln_final(jlens_transport(h, lens, layer)))
+
+def get_template_idx(template: str, lens: dict) -> int:
+    return lens["words"].index(template)
+
+def get_template_vec(template: str, layer: int, lens: dict) -> Tensor:
+    return lens["templates"][layer, get_template_idx(template, lens)]
+
+def print_templates(tlens: dict, contains: str | None = None):
+    for i, word in enumerate(tlens["words"]):
+        if contains is None or contains.lower() in word.lower():
+            print(f"{i}\t{word!r}")
 
 def get_tlens_scores(h: Tensor, layer: int, tlens: dict) -> Tensor:
     return t.cosine_similarity(tlens["templates"][layer].to(h.device), h, dim=-1)
