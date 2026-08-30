@@ -8,11 +8,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from dotenv import load_dotenv
 import random
+from tabulate import tabulate
 import IPython
+
+from huggingface_hub import hf_hub_download
 
 import numpy as np
 
 import torch as t
+from torch import Tensor
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformer_lens.model_bridge import TransformerBridge
 
@@ -182,4 +187,4 @@ def top_toks_table(logits: Tensor, tokenizer, k: int = 10, show_negative: bool =
         if show_negative:
             return (top_strs, top_vals, bot_strs, bot_vals)
         else:
-            return (top_strs, top_vals
+            return (top_strs, top_vals)
