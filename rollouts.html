@@ -1,0 +1,76 @@
+<title>rollout viewer</title>
+<style>
+body { background: #16161e; color: #d4d4dc; font-family: monospace; font-size: 14px; margin: 0; height: 100vh; display: flex; overflow: hidden; }
+#runs { width: 290px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid #3a3a4a; }
+#rollouts { width: 150px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid #3a3a4a; }
+#main { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 24px; }
+.item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid #22222e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item:hover { background: #22222e; }
+.item.sel { background: #2a2a3a; }
+.sub { color: #777; font-size: 12px; }
+.odd { color: #ff7b5c; } .even { color: #8fd35f; } .unparsed { color: #777; }
+#header { color: #777; font-size: 12px; margin-bottom: 14px; }
+.msg { margin-bottom: 18px; }
+.role { color: #777; font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+.text { white-space: pre-wrap; overflow-wrap: break-word; background: #1c1c26; border: 1px solid #3a3a4a; padding: 10px 14px; border-radius: 4px; line-height: 1.45; }
+.reasoning .text { color: #9a9aa8; }
+</style>
+<div id="runs"></div>
+<div id="rollouts"></div>
+<div id="main"></div>
+<script>
+let runs = [], cur = null, sel = {run: -1, roll: -1};
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+function parseAnswer(content) {  // mirrors parse_answer in utils.py
+    if (content == null) return null;
+    const strip = s => s.trim().replace(/^\*+|\*+$/g, '').replace(/\.+$/, '').trim();
+    const num = s => /^-?\d[\d,]*$/.test(s) ? s.replace(/,/g, '') : null;
+    if (num(strip(content))) return num(strip(content));
+    const bold = content.match(/\*\*(-?\d[\d,]*)\*\*/);
+    if (bold) return bold[1].replace(/,/g, '');
+    for (const line of content.split('\n')) if (num(strip(line))) return num(strip(line));
+    const first = content.split('\n')[0].match(/-?\d[\d,]*/);
+    return first ? first[0].replace(/,/g, '') : null;
+}
+const parity = ans => ans == null ? 'unparsed' : (ans[ans.length - 1] % 2 ? 'odd' : 'even');
+
+const fmtTime = name => { const m = name.match(/(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)\d\d$/); return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]}` : ''; };
+
+function renderRuns() {
+    $('runs').innerHTML = runs.map((r, i) => `<div class="item ${i === sel.run ? 'sel' : ''}" onclick="selectRun(${i})">
+        <div>${esc(r.model)}</div>
+        <div class="sub">${fmtTime(r.name)} · ${r.n} samples${r.hack_rate ? ` · <span class="odd">${Math.round(r.hack_rate.rate * 100)}% odd</span>` : ''}</div></div>`).join('');
+}
+
+function renderRollouts() {
+    $('rollouts').innerHTML = cur.results.map((r, i) => {
+        const ans = parseAnswer(r.choices[0].message.content);
+        return `<div class="item ${i === sel.roll ? 'sel' : ''}" onclick="selectRollout(${i})"><span class="sub">${i}</span> <span class="${parity(ans)}">${ans ?? '∅'}</span></div>`;
+    }).join('');
+}
+
+async function selectRun(i) {
+    sel.run = i; sel.roll = -1; renderRuns();
+    $('rollouts').innerHTML = '<div class="item sub">loading…</div>'; $('main').innerHTML = '';
+    cur = await (await fetch('/run/' + runs[i].name)).json();
+    renderRollouts();
+    selectRollout(0);
+}
+
+const block = (role, text, cls = '') => `<div class="msg ${cls}"><div class="role">${role}</div><div class="text">${esc(text)}</div></div>`;
+
+function selectRollout(i) {
+    sel.roll = i; renderRollouts();
+    const r = cur.results[i], choice = r.choices[0], msg = choice.message;
+    let h = `<div id="header">${esc(r.model)} · ${esc(r.provider ?? '?')} · ${new Date(r.created * 1000).toLocaleString()} · finish: ${esc(choice.finish_reason ?? '?')}</div>`;
+    h += block('user', cur.metadata.prompt ?? '(prompt not saved)');
+    if (msg.reasoning) h += block('reasoning', msg.reasoning, 'reasoning');
+    h += block('assistant', msg.content ?? '(no content)');
+    $('main').innerHTML = h;
+    $('main').scrollTop = 0;
+}
+
+(async () => { runs = await (await fetch('/runs')).json(); renderRuns(); if (runs.length) selectRun(0); })();
+</script>
