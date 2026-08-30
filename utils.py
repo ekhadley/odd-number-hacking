@@ -6,6 +6,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from dotenv import load_dotenv
+import random
+
+import numpy as np
 
 import torch as t
 from transformers import AutoModelForCausalLM, AutoTokenizer
