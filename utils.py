@@ -49,13 +49,14 @@ def print_batch(results: list[dict]) -> None:
         print(f"{lime}{msg['content']}{endc}")
         print()
 
-def query(model: str, prompt: str) -> dict:
+def query(model: str, prompt: str, provider: str) -> dict:
     resp = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
         headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
         json={
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
+            "provider": {"order": [provider], "allow_fallbacks": False},
             "reasoning": {"enabled": True},
         },
         timeout=600,
@@ -67,9 +68,10 @@ def query(model: str, prompt: str) -> dict:
     return data
 
 
-def run_batch(model: str, prompt: str, n_samples: int, bar: tqdm) -> list[dict]:
-    with ThreadPoolExecutor(max_workers=n_samples) as pool:
-        futures = [pool.submit(query, model, prompt) for _ in range(n_samples)]
+def run_batch(model: str, prompt: str, provider: str, n_samples: int, bar: tqdm, max_workers:int|None = None) -> list[dict]:
+    if max_workers is None: max_workers = n_samples
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(query, model, prompt, provider) for _ in range(n_samples)]
         for done, _ in enumerate(as_completed(futures), 1):
             bar.set_description(f"{model} {done}/{n_samples} done")
     return [f.result() for f in futures]
