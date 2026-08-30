@@ -25,4 +25,4 @@ def run(name):
     return send_file(os.path.join(DIR, "results", f"{name}.json"))
 
 if __name__ == "__main__":
-    app.run(port=7861)
+    app.run(port=7862)
