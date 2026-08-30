@@ -36,6 +36,8 @@ for model in (bar := tqdm(frontier_models + other_models)):
     bar.set_description(f"{model} 0/{n_samples} done")
     results = run_batch(model, prompt, n_samples, bar)
     print_batch(results)
-    bar.write(f"wrote {save_batch(results, metadata={'prompt': prompt})}")
+    rate = hack_rate(results)
+    bar.write(f"{model}: {rate['rate']:.0%} odd ({rate['odd']} odd, {rate['even']} even, {rate['unparsed']} unparsed)")
+    bar.write(f"wrote {save_batch(results, metadata={'prompt': prompt, 'hack_rate': rate})}")
 
 #%%
