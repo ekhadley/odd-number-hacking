@@ -7,12 +7,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from dotenv import load_dotenv
 import random
+import IPython
 
 import numpy as np
 
 import torch as t
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformer_lens.model_bridge import TransformerBridge
+
+IPYTHON = IPython.get_ipython()
+if IPYTHON is not None:
+    IPYTHON.run_line_magic('load_ext', 'autoreload')
+    IPYTHON.run_line_magic('autoreload', '2')
 
 purple = '\x1b[38;2;255;0;255m'
 blue = '\x1b[38;2;0;0;255m'
@@ -85,11 +91,23 @@ def load_batch_results(path: str) -> tuple[list[dict], dict]:
     return data["results"], data["metadata"]
 
 
-def stream_toks_bridge(model: TransformerBridge, inputs, new_toks: int = 512):
+def stream_toks_hf(model: AutoModelForCausalLM, inputs, new_toks: int = 512):
     toks = inputs
     past = None
     for _ in range(new_toks):
-        logits, past = model(toks, return_type="logits_and_cache", past_key_values=past)
+        out = model(toks, past_key_values=past, use_cache=True)
+        past = out.past_key_values
+        probs = t.softmax(out.logits[0, -1], dim=-1)
+        toks = t.multinomial(probs, num_samples=1).unsqueeze(0)
+        if toks.item() == model.tokenizer.eos_token_id:
+            break
+        yield toks.item()
+
+def stream_toks(model: TransformerBridge, inputs, new_toks: int = 512):
+    toks = inputs
+    past = None
+    for _ in range(new_toks):
+        logits, past = model(toks, return_type="logits_and_cache", past_key_values=past, use_cache=True)
         probs = t.softmax(logits[0, -1], dim=-1)
         toks = t.multinomial(probs, num_samples=1).unsqueeze(0)
         if toks.item() == model.tokenizer.eos_token_id:

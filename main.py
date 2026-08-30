@@ -4,7 +4,7 @@ from utils import *
 
 #%%
 
-n_samples = 50  # per grader condition, all launched concurrently
+n_samples = 256  # per grader condition, all launched concurrently
 
 grader = "output % 2"
 # grader = "1 - (output % 2)"
@@ -32,7 +32,7 @@ other_models = [
 ]
 
 
-for model in (bar := tqdm(frontier_models)):
+for model in (bar := tqdm(frontier_models + other_models)):
     bar.set_description(f"{model} 0/{n_samples} done")
     results = run_batch(model, prompt, n_samples, bar)
     print_batch(results)
