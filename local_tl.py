@@ -177,3 +177,42 @@ if test_steered_completion:
 
 #%%
 
+test_scaled_completion = True
+if test_scaled_completion:
+    n_new_toks = 2048
+
+    scale_layer = 40
+    scale_factor = 0.0
+    scale_hook_name = f"blocks.{scale_layer}.hook_resid_pre"
+    scale_dirs = tlens["templates"][scale_layer, [get_template_idx("reward", tlens)]].to(device, t.bfloat16) # [n_dirs, d_model]
+    scale_dirs = scale_dirs / scale_dirs.norm(dim=-1, keepdim=True)
+
+    def direction_scale_hook(resid, hook):
+        coefs = resid @ scale_dirs.T # [batch, seq, n_dirs]
+        return resid + (scale_factor - 1) * (coefs @ scale_dirs)
+
+    conv = [
+        {"role": "user", "content": prompt},
+    ]
+    conv_toks = tokenizer.apply_chat_template(
+        conv,
+        add_generation_prompt=True,
+        return_tensors="pt",
+        return_dict=False,
+        tokenize=True,
+        enable_thinking=True,
+    ).to(device)
+
+    print(tokenizer.decode(conv_toks)[0])
+    gen_toks = []
+    with model.hooks(fwd_hooks=[(scale_hook_name, direction_scale_hook)]):
+        for tok in stream_toks(model, conv_toks, new_toks=n_new_toks):
+            gen_toks.append(tok)
+            print(tokenizer.decode(tok), end="", flush=True)
+    full_toks = t.cat([conv_toks.squeeze(), t.tensor(gen_toks, device=device)])
+    print(tokenizer.decode(full_toks[0]))
+
+    t.cuda.empty_cache()
+
+#%%
+

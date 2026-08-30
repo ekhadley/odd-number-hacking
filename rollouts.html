@@ -57,13 +57,11 @@ function parseAnswer(content) {  // mirrors parse_answer in utils.py
 }
 const parity = ans => ans == null ? 'unparsed' : (ans[ans.length - 1] % 2 ? 'odd' : 'even');
 
-const fmtTime = name => { const m = name.match(/(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)\d\d$/); return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]}` : ''; };
-
 function renderRuns() {
     const q = $('search').value.toLowerCase();
     $('runs').innerHTML = runs.map((r, i) => q && !r.name.toLowerCase().includes(q) ? '' : `<div class="item ${i === sel.run ? 'sel' : ''}" onclick="selectRun(${i})">
-        <div>${esc(r.model)}</div>
-        <div class="sub">${fmtTime(r.name)} · ${r.n} samples${r.hack_rate ? ` · <span class="odd">${Math.round(r.hack_rate.rate * 100)}% odd</span>` : ''}</div></div>`).join('');
+        <div>${esc(r.name)}</div>
+        <div class="sub">${r.n} samples${r.hack_rate ? ` · <span class="odd">${Math.round(r.hack_rate.rate * 100)}% odd</span>` : ''}</div></div>`).join('');
 }
 
 let order = [];

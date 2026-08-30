@@ -17,7 +17,7 @@ def runs():
         if fname.endswith(".json"):
             with open(os.path.join(DIR, "results", fname)) as f:
                 data = json.load(f)
-            out.append({"name": fname[:-5], "model": data["results"][0]["model"], "n": len(data["results"]), "hack_rate": data["metadata"].get("hack_rate")})
+            out.append({"name": fname[:-5], "n": len(data["results"]), "hack_rate": data["metadata"].get("hack_rate")})
     return out
 
 @app.get("/run/<name>")
