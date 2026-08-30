@@ -65,7 +65,7 @@ def query(model: str, prompt: str, provider: str) -> dict:
             "provider": {"order": [provider], "allow_fallbacks": False},
             "reasoning": {"enabled": True},
         },
-        timeout=600,
+        timeout=300,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -74,13 +74,21 @@ def query(model: str, prompt: str, provider: str) -> dict:
     return data
 
 
-def run_batch(model: str, prompt: str, provider: str, n_samples: int, bar: tqdm, max_workers:int|None = None) -> list[dict]:
+def run_batch(model: str, prompt: str, provider: str, n_samples: int, bar: tqdm|None = None, max_workers:int|None = None, timeout: float = 600) -> list[dict]:
     if max_workers is None: max_workers = n_samples
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(query, model, prompt, provider) for _ in range(n_samples)]
-        for done, _ in enumerate(as_completed(futures), 1):
-            if bar is not None: bar.set_description(f"{model} {done}/{n_samples} done")
-    return [f.result() for f in futures]
+    own_bar = bar is None
+    if own_bar: bar = tqdm(total=n_samples, desc=model)
+    pool = ThreadPoolExecutor(max_workers=max_workers)
+    futures = [pool.submit(query, model, prompt, provider) for _ in range(n_samples)]
+    try:
+        for done, _ in enumerate(as_completed(futures, timeout=timeout), 1):
+            if own_bar: bar.update(1)
+            else: bar.set_description(f"{model} {done}/{n_samples} done")
+    except TimeoutError:
+        print(f"\nWARNING: {model}: abandoning {sum(not f.done() for f in futures)} requests still hanging after {timeout}s")
+    pool.shutdown(wait=False, cancel_futures=True)
+    if own_bar: bar.close()
+    return [f.result() for f in futures if f.done()]
 
 
 def save_batch(results: list[dict], name: str = None, timestamp: bool = True, metadata: dict = None) -> str:
