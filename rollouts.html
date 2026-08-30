@@ -12,6 +12,11 @@ body { background: #16161e; color: #d4d4dc; font-family: monospace; font-size: 1
 .sub { color: #777; font-size: 12px; }
 .odd { color: #ff7b5c; } .even { color: #8fd35f; } .unparsed { color: #777; }
 #header { color: #777; font-size: 12px; margin-bottom: 14px; }
+#textsearch { position: fixed; top: 10px; right: 24px; width: 220px; background: #1e1e28; color: #d4d4dc; border: 1px solid #3a3a4a; font-family: monospace; font-size: 13px; padding: 5px 10px; outline: none; }
+mark { background: #e0c060; color: #16161e; }
+.item.hit { background: #33301c; }
+.item.hit:hover { background: #3d3924; }
+.item.hit.sel { background: #4a4430; }
 .msg { margin-bottom: 18px; }
 .role { color: #777; font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
 .text { white-space: pre-wrap; overflow-wrap: break-word; background: #1c1c26; border: 1px solid #3a3a4a; padding: 10px 14px; border-radius: 4px; line-height: 1.45; }
@@ -20,10 +25,24 @@ body { background: #16161e; color: #d4d4dc; font-family: monospace; font-size: 1
 <div id="left"><input id="search" placeholder="filter runs" oninput="renderRuns()"><div id="runs"></div></div>
 <div id="rollouts"></div>
 <div id="main"></div>
+<input id="textsearch" placeholder="highlight text" oninput="research()">
 <script>
 let runs = [], cur = null, sel = {run: -1, roll: -1};
 const $ = id => document.getElementById(id);
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+function hl(text) {
+    const q = $('textsearch').value;
+    if (!q) return esc(text);
+    const lower = text.toLowerCase(), ql = q.toLowerCase();
+    let out = '', pos = 0, idx;
+    while ((idx = lower.indexOf(ql, pos)) !== -1) {
+        out += esc(text.slice(pos, idx)) + '<mark>' + esc(text.slice(idx, idx + q.length)) + '</mark>';
+        pos = idx + q.length;
+    }
+    return out + esc(text.slice(pos));
+}
+const countHits = (text, q) => { let n = 0, pos = 0; while ((pos = text.indexOf(q, pos)) !== -1) { n++; pos += q.length; } return n; };
 
 function parseAnswer(content) {  // mirrors parse_answer in utils.py
     if (content == null) return null;
@@ -50,9 +69,14 @@ function renderRuns() {
 let order = [];
 const rank = {odd: 0, even: 1, unparsed: 2};
 function renderRollouts() {
-    order = cur.results.map((r, i) => { const ans = parseAnswer(r.choices[0].message.content); return {i, ans, p: parity(ans)}; });
+    const q = $('textsearch').value.toLowerCase();
+    order = cur.results.map((r, i) => {
+        const msg = r.choices[0].message, ans = parseAnswer(msg.content);
+        const hits = q ? countHits(`${msg.reasoning ?? ''}\n${msg.content ?? ''}`.toLowerCase(), q) : 0;
+        return {i, ans, p: parity(ans), hits};
+    });
     order.sort((a, b) => rank[a.p] - rank[b.p] || a.i - b.i);
-    $('rollouts').innerHTML = order.map(({i, ans, p}) => `<div class="item ${i === sel.roll ? 'sel' : ''}" onclick="selectRollout(${i})"><span class="sub">${i}</span> <span class="${p}">${ans ?? '∅'}</span></div>`).join('');
+    $('rollouts').innerHTML = order.map(({i, ans, p, hits}) => `<div class="item ${hits ? 'hit' : ''} ${i === sel.roll ? 'sel' : ''}" onclick="selectRollout(${i})"><span class="sub">${i}</span> <span class="${p}">${ans ?? '∅'}</span>${hits ? ` <span class="sub">×${hits}</span>` : ''}</div>`).join('');
 }
 
 async function selectRun(i) {
@@ -63,18 +87,23 @@ async function selectRun(i) {
     selectRollout(order[0].i);
 }
 
-const block = (role, text, cls = '') => `<div class="msg ${cls}"><div class="role">${role}</div><div class="text">${esc(text)}</div></div>`;
+const block = (role, text, cls = '') => `<div class="msg ${cls}"><div class="role">${role}</div><div class="text">${hl(text)}</div></div>`;
 
-function selectRollout(i) {
-    sel.roll = i; renderRollouts();
-    const r = cur.results[i], choice = r.choices[0], msg = choice.message;
+function renderMain() {
+    const r = cur.results[sel.roll], choice = r.choices[0], msg = choice.message;
     let h = `<div id="header">${esc(r.model)} · ${esc(r.provider ?? '?')} · ${new Date(r.created * 1000).toLocaleString()} · finish: ${esc(choice.finish_reason ?? '?')}</div>`;
     h += block('user', cur.metadata.prompt ?? '(prompt not saved)');
     if (msg.reasoning) h += block('reasoning', msg.reasoning, 'reasoning');
     h += block('assistant', msg.content ?? '(no content)');
     $('main').innerHTML = h;
+}
+
+function selectRollout(i) {
+    sel.roll = i; renderRollouts(); renderMain();
     $('main').scrollTop = 0;
 }
+
+function research() { if (cur) { renderRollouts(); if (sel.roll >= 0) renderMain(); } }
 
 (async () => { runs = await (await fetch('/runs')).json(); renderRuns(); if (runs.length) selectRun(0); })();
 </script>
