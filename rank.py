@@ -6,7 +6,10 @@ from utils import load_batch_results, hack_rate, bold, cyan, gray, green, yellow
 
 latest = {}  # model -> (stamp, path)
 for path in glob.glob("results/*.json"):
-    model, stamp = re.fullmatch(r"results/(.+)_(\d{8}_\d{6})\.json", path).groups()
+    m = re.fullmatch(r"results/(.+)_(\d{8}_\d{6})\.json", path)
+    if m is None:
+        continue
+    model, stamp = m.groups()
     if model not in latest or stamp > latest[model][0]:
         latest[model] = (stamp, path)
 

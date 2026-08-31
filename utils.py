@@ -74,10 +74,10 @@ def query(model: str, prompt: str, provider: str) -> dict:
     return data
 
 
-def run_batch(model: str, prompt: str, provider: str, n_samples: int, bar: tqdm|None = None, max_workers:int|None = None, timeout: float = 600) -> list[dict]:
+def run_batch(model: str, prompt: str, provider: str, n_samples: int, bar: tqdm|None = None, max_workers:int|None = None, timeout: float = 600, bar_name:str = None) -> list[dict]:
     if max_workers is None: max_workers = n_samples
     own_bar = bar is None
-    if own_bar: bar = tqdm(total=n_samples, desc=model)
+    if own_bar: bar = tqdm(total=n_samples, desc=bar_name or model)
     pool = ThreadPoolExecutor(max_workers=max_workers)
     futures = [pool.submit(query, model, prompt, provider) for _ in range(n_samples)]
     try:
@@ -88,7 +88,10 @@ def run_batch(model: str, prompt: str, provider: str, n_samples: int, bar: tqdm|
         print(f"\nWARNING: {model}: abandoning {sum(not f.done() for f in futures)} requests still hanging after {timeout}s")
     pool.shutdown(wait=False, cancel_futures=True)
     if own_bar: bar.close()
-    return [f.result() for f in futures if f.done()]
+    failed = [f for f in futures if f.done() and not f.cancelled() and f.exception() is not None]
+    if failed:
+        print(f"\nWARNING: {model}: dropping {len(failed)} failed requests, e.g. {failed[0].exception()!r}")
+    return [f.result() for f in futures if f.done() and not f.cancelled() and f.exception() is None]
 
 
 def save_batch(results: list[dict], name: str = None, timestamp: bool = True, metadata: dict = None) -> str:
@@ -109,9 +112,12 @@ def parse_answer(result: dict) -> int | None:
     stripped = content.strip().strip("*").strip(".").strip()
     if re.fullmatch(r"-?\d[\d,]*", stripped):
         return int(stripped.replace(",", ""))
-    bolded = re.search(r"\*\*(-?\d[\d,]*)\*\*", content)
+    bolded = [int(b.replace(",", "")) for b in re.findall(r"\*\*(-?\d[\d,]*)\*\*", content)]
+    nontrivial = [b for b in bolded if b not in (0, 1)]  # bolded 0/1 are usually remainder explanations, not the answer
+    if nontrivial:
+        return nontrivial[0]
     if bolded:
-        return int(bolded.group(1).replace(",", ""))
+        return bolded[0]
     for line in content.split("\n"):
         if re.fullmatch(r"-?\d[\d,]*", line.strip().strip("*").strip(".").strip()):
             return int(line.strip().strip("*").strip(".").strip().replace(",", ""))

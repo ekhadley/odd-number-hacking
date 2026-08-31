@@ -1,0 +1,86 @@
+{
+ "synthetic": {
+  "odd": {
+   "hit_traces": 161,
+   "n_traces": 1065,
+   "raw_rate": 0.1511737089201878,
+   "per_10k_chars": 0.14314852059115893
+  },
+  "even": {
+   "hit_traces": 183,
+   "n_traces": 4296,
+   "raw_rate": 0.04259776536312849,
+   "per_10k_chars": 0.1224516588619905
+  }
+ },
+ "reward hack": {
+  "odd": {
+   "hit_traces": 749,
+   "n_traces": 1065,
+   "raw_rate": 0.7032863849765258,
+   "per_10k_chars": 0.6659518131849568
+  },
+  "even": {
+   "hit_traces": 2000,
+   "n_traces": 4296,
+   "raw_rate": 0.4655493482309125,
+   "per_10k_chars": 1.338269495759459
+  }
+ },
+ "eval": {
+  "odd": {
+   "hit_traces": 795,
+   "n_traces": 1065,
+   "raw_rate": 0.7464788732394366,
+   "per_10k_chars": 0.7068513904967164
+  },
+  "even": {
+   "hit_traces": 2067,
+   "n_traces": 4296,
+   "raw_rate": 0.48114525139664804,
+   "per_10k_chars": 1.3831015238674007
+  }
+ },
+ "honest": {
+  "odd": {
+   "hit_traces": 298,
+   "n_traces": 1065,
+   "raw_rate": 0.27981220657276995,
+   "per_10k_chars": 0.2649581312805302
+  },
+  "even": {
+   "hit_traces": 1354,
+   "n_traces": 4296,
+   "raw_rate": 0.31517690875232773,
+   "per_10k_chars": 0.9060084486291536
+  }
+ },
+ "normal user": {
+  "odd": {
+   "hit_traces": 102,
+   "n_traces": 1065,
+   "raw_rate": 0.09577464788732394,
+   "per_10k_chars": 0.09069036708259759
+  },
+  "even": {
+   "hit_traces": 85,
+   "n_traces": 4296,
+   "raw_rate": 0.01978584729981378,
+   "per_10k_chars": 0.056876453569777004
+  }
+ },
+ "benchmark": {
+  "odd": {
+   "hit_traces": 782,
+   "n_traces": 1065,
+   "raw_rate": 0.7342723004694836,
+   "per_10k_chars": 0.6952928142999149
+  },
+  "even": {
+   "hit_traces": 1115,
+   "n_traces": 4296,
+   "raw_rate": 0.2595437616387337,
+   "per_10k_chars": 0.7460852438858983
+  }
+ }
+}
